@@ -28,13 +28,26 @@ blueprint:
         entity:
           filter:
             - domain: input_text
-    esphome_prefix:
-      name: ESPHome action prefix
-      description: >-
-        The part between esphome. and _show_message in the display's action,
-        e.g. onx2424g013_dbbc54 for esphome.onx2424g013_dbbc54_show_message.
+    display:
+      name: ESPHome display
+      description: The ESPHome device that shows the notifications.
       selector:
-        text: {}
+        device:
+          filter:
+            - integration: esphome
+    advanced:
+      name: Advanced
+      collapsed: true
+      input:
+        esphome_prefix:
+          name: ESPHome action prefix (optional)
+          description: >-
+            Only needed when the actions are not found. Normally they are named
+            after the device, e.g. esphome.onx2424g013_dbbc54_show_message; enter
+            the part between esphome. and _show_message to override it.
+          default: ""
+          selector:
+            text: {}
     timeout:
       name: Timeout
       description: Seconds before the message disappears; 0 keeps it until removed.
@@ -47,7 +60,10 @@ blueprint:
 variables:
   devices: !input devices
   active_notification: !input active_notification
+  display: !input display
   esphome_prefix: !input esphome_prefix
+  # ESPHome names its actions after the device: "ONX2424G013 dbbc54" -> onx2424g013_dbbc54.
+  prefix: "{{ esphome_prefix | trim or (device_attr(display, 'name') | slugify) }}"
   timeout: !input timeout
 triggers:
   - trigger: event
@@ -63,7 +79,7 @@ actions:
   - choose:
       - conditions: "{{ event.action in ['added', 'updated'] }}"
         sequence:
-          - action: "{{ 'esphome.' ~ esphome_prefix ~ '_show_message' }}"
+          - action: "{{ 'esphome.' ~ prefix ~ '_show_message' }}"
             data:
               title: "{{ event.title or event.app }}"
               message: "{{ event.text or event.ticker or event.app }}"
@@ -77,7 +93,7 @@ actions:
       - conditions: >-
           {{ event.action == 'removed' and states(active_notification) == key }}
         sequence:
-          - action: "{{ 'esphome.' ~ esphome_prefix ~ '_dismiss_message' }}"
+          - action: "{{ 'esphome.' ~ prefix ~ '_dismiss_message' }}"
           - action: input_text.set_value
             target:
               entity_id: !input active_notification
