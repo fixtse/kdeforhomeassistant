@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
@@ -16,6 +17,7 @@ from custom_components.kdeforhomeassistant.notifications import (
     NotificationSettings,
     NotificationStore,
     clean_app_name,
+    notification_content,
 )
 
 from .fake_device import FakeDevice
@@ -96,7 +98,9 @@ async def test_choose_apps_per_device(hass: HomeAssistant, hass_ws_client) -> No
     assert event["text"] == "Again"
     assert event["icon_url"] is None
     registry_device = dr.async_get(hass).async_get_device(
-        identifiers={(DOMAIN, entry.subentries[_subentry_id(entry, "Desk")].data["device_id"])}
+        identifiers={
+            (DOMAIN, entry.subentries[_subentry_id(entry, "Desk")].data["device_id"])
+        }
     )
     assert event["device_id"] == registry_device.id
 
@@ -117,7 +121,9 @@ async def test_choose_apps_per_device(hass: HomeAssistant, hass_ws_client) -> No
         ("updated", "9"),
         ("removed", "9"),
     ]
-    assert hass.states.get("event.desk_notification").attributes["event_type"] == "removed"
+    assert (
+        hass.states.get("event.desk_notification").attributes["event_type"] == "removed"
+    )
 
     # Silent ones on request; forgetting an app lists it again on its next one.
     await ws.send_json_auto_id(
@@ -239,7 +245,9 @@ async def test_store_persists(hass: HomeAssistant, hass_storage) -> None:
     }
     store = NotificationStore(hass)
     await store.async_load()
-    assert store.get("a") == NotificationSettings(enabled=True, apps={"Telegram": False})
+    assert store.get("a") == NotificationSettings(
+        enabled=True, apps={"Telegram": False}
+    )
     assert store.get("b") == NotificationSettings()
     assert store.async_seen("a", "Signal") is True
     assert store.async_seen("a", "Signal") is False
@@ -284,3 +292,75 @@ def test_icons_and_names() -> None:
     assert clean_app_name(" Telegram ") == "Telegram"
     assert len(clean_app_name("x" * 500)) == 100
     assert NotificationSettings.from_dict([]) == NotificationSettings()
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ({"title": "Mail", "text": "Hi"}, ("Mail", "Hi")),
+        ({"title": "Fallback", "text": "Hi", "conversation": []}, ("Fallback", "Hi")),
+        (
+            {"title": "Fallback", "text": "Hi", "conversation": [None, {"content": 5}]},
+            ("Fallback", "Hi"),
+        ),
+        (
+            {
+                "conversation": [
+                    {"sender": "Ann", "content": "First"},
+                    {"sender": "Ann", "content": "Second"},
+                ]
+            },
+            ("Ann", "First\nSecond"),
+        ),
+        (
+            {
+                "groupName": "Friends",
+                "conversation": [
+                    {"sender": "Ann", "content": "First"},
+                    {"sender": "Ann", "content": "Second"},
+                    {"sender": "Bob", "content": "Third"},
+                ],
+            },
+            ("Friends", "Ann:\nFirst\nSecond\nBob:\nThird"),
+        ),
+    ],
+)
+def test_notification_conversation_content(body, expected):
+    """Conversation messages remain together, with sender changes for groups."""
+    assert notification_content(body) == expected
+
+
+async def test_conversation_packet_updates(hass: HomeAssistant) -> None:
+    """Successive packets carry the complete conversation to display consumers."""
+    entry = await _setup(hass)
+    device = await _connected(hass, entry, "Phone")
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    subentry = entry.subentries[_subentry_id(entry, "Phone")]
+    entry.runtime_data.notifications.async_update(
+        subentry.data["device_id"], enabled=True
+    )
+    events = []
+    hass.bus.async_listen(EVENT_NOTIFICATION, events.append)
+    messages = [{"sender": "Ann", "content": "First"}]
+    device.notify(
+        id="chat-1",
+        appName="Telegram",
+        title="Telegram",
+        text="First",
+        conversation=messages,
+    )
+    await _settle(hass)
+    messages.append({"sender": "Ann", "content": "Second"})
+    device.notify(
+        id="chat-1",
+        appName="Telegram",
+        title="Telegram",
+        text="Second",
+        conversation=messages,
+    )
+    await _settle(hass)
+    assert events[-1].data["action"] == "updated"
+    assert events[-1].data["title"] == "Ann"
+    assert events[-1].data["text"] == "First\nSecond"
+    device.close()
+    assert await hass.config_entries.async_unload(entry.entry_id)

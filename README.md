@@ -186,6 +186,8 @@ Phones and computers can share their notifications with Home Assistant directly,
 
 Silent notifications are skipped unless you turn on **Include silent notifications**; a phone sends its current notifications again as silent ones when it connects, so this keeps old ones from showing up again.
 
+Conversation notifications include the message history supplied by the sender, grouped under the chat or group title with sender changes labeled. This matches the desktop KDE Connect receiver; notifications that supply no history keep their original title and text.
+
 Every shared notification fires a `kdeforhomeassistant_notification` event and updates the device's `event` Notification entity:
 
 | Field | |

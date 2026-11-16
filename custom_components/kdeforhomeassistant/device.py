@@ -56,6 +56,7 @@ from .notifications import (
     NotificationStore,
     async_get_icons,
     clean_app_name,
+    notification_content,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -284,7 +285,9 @@ class KdeConnectDevice:
             return
         if body.get("isCancel"):
             self._notification_icon_urls.pop(notification_id, None)
-            if (app := self._shared_notifications.pop(notification_id, None)) is not None:
+            if (
+                app := self._shared_notifications.pop(notification_id, None)
+            ) is not None:
                 self._fire_notification(
                     {"action": ACTION_REMOVED, "id": notification_id, "app": app}
                 )
@@ -309,12 +312,13 @@ class KdeConnectDevice:
             expired_id = next(iter(self._shared_notifications))
             del self._shared_notifications[expired_id]
             self._notification_icon_urls.pop(expired_id, None)
+        title, text = notification_content(body)
         data: dict[str, Any] = {
             "action": action,
             "id": notification_id,
             "app": app,
-            "title": _text(body.get("title")),
-            "text": _text(body.get("text")),
+            "title": title,
+            "text": text,
             "ticker": _text(body.get("ticker")),
             "silent": silent,
             "icon_url": self._notification_icon_urls.get(notification_id),
@@ -409,9 +413,7 @@ class KdeConnectDevice:
                 )
         elif isinstance(name := body.get("player"), str) and name in self.players:
             player = self.players[name]
-            player.update(
-                {key: body[key] for key in PLAYER_FIELDS if key in body}
-            )
+            player.update({key: body[key] for key in PLAYER_FIELDS if key in body})
             if "pos" in body:
                 player["posUpdatedAt"] = dt_util.utcnow()
         else:

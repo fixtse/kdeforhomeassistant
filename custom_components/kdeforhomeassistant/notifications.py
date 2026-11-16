@@ -222,3 +222,39 @@ def clean_app_name(value: Any) -> str:
     if not isinstance(value, str) or not (name := value.strip()):
         return "Unknown"
     return name[:MAX_APP_NAME]
+
+
+def notification_content(body: dict[str, Any]) -> tuple[str, str]:
+    """Render KDE Connect conversation history like the desktop receiver."""
+    title = body.get("title") if isinstance(body.get("title"), str) else ""
+    text = body.get("text") if isinstance(body.get("text"), str) else ""
+    conversation = body.get("conversation")
+    if not isinstance(conversation, list):
+        return title, text
+    messages = [
+        message
+        for message in conversation[-100:]
+        if isinstance(message, dict)
+        and isinstance(message.get("content"), str)
+        and message["content"]
+    ]
+    if not messages:
+        return title, text
+    group = body.get("groupName")
+    sender = messages[0].get("sender")
+    title = (
+        group
+        if isinstance(group, str) and group
+        else sender
+        if isinstance(sender, str) and sender
+        else title
+    )
+    previous_sender = title
+    lines: list[str] = []
+    for message in messages:
+        sender = message.get("sender")
+        if isinstance(sender, str) and sender and sender != previous_sender:
+            lines.append(f"{sender}:")
+            previous_sender = sender
+        lines.append(message["content"])
+    return title, "\n".join(lines)
