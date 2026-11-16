@@ -48,6 +48,15 @@ blueprint:
           default: ""
           selector:
             text: {}
+    icon_base_url:
+      name: Icon server URL (optional)
+      description: >-
+        Home Assistant URL reachable by the display, for example
+        http://192.168.1.2:8123. Use this when Home Assistant advertises
+        a VPN address the display cannot reach. Leave empty to use the event URL.
+      default: ''
+      selector:
+        text: {}
     timeout:
       name: Timeout
       description: Seconds before the message disappears; 0 keeps it until removed.
@@ -64,6 +73,7 @@ variables:
   esphome_prefix: !input esphome_prefix
   # ESPHome names its actions after the device: "ONX2424G013 dbbc54" -> onx2424g013_dbbc54.
   prefix: "{{ esphome_prefix | trim or (device_attr(display, 'name') | slugify) }}"
+  icon_base_url: !input icon_base_url
   timeout: !input timeout
 triggers:
   - trigger: event
@@ -83,7 +93,13 @@ actions:
             data:
               title: "{{ event.title or event.app }}"
               message: "{{ event.text or event.ticker or event.app }}"
-              image_url: "{{ event.icon_url or '' }}"
+              image_url: >-
+                {% set icon = event.icon_url or '' %}
+                {% if icon and icon_base_url | trim and '/api/' in icon %}
+                  {{ icon_base_url | trim | trim('/') }}/api/{{ icon.split('/api/', 1)[1] }}
+                {% else %}
+                  {{ icon }}
+                {% endif %}
               timeout_seconds: "{{ timeout | int(30) }}"
           - action: input_text.set_value
             target:

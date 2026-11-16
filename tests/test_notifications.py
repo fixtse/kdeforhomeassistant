@@ -192,6 +192,17 @@ async def test_notification_icon(hass: HomeAssistant, hass_client_no_auth) -> No
     resp = await client.get("/api/kdeforhomeassistant/notification_icon/nope.png")
     assert resp.status == 404
 
+    # Updates without another payload retain the existing icon.
+    device.notify(id="1", appName="Mail", title="Updated mail")
+    await _settle(hass)
+    assert events[-1].data["icon_url"] == url
+    assert events[-1].data["action"] == "updated"
+    device.notify(id="1", isCancel=True)
+    await _settle(hass)
+    device.notify(id="1", appName="Mail", title="Reused id")
+    await _settle(hass)
+    assert events[-1].data["icon_url"] is None
+
     # A failed download still passes on the notification, without icon.
     hub = entry.runtime_data.hub
 

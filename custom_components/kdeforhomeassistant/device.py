@@ -146,6 +146,7 @@ class KdeConnectDevice:
         self._notification_listeners: list[Callable[[dict[str, Any]], None]] = []
         # Notifications we passed on, by id, to report when they go away.
         self._shared_notifications: dict[str, str] = {}
+        self._notification_icon_urls: dict[str, str] = {}
         # Log a lost connection once, and once when it comes back.
         self._logged_unavailable = False
 
@@ -282,6 +283,7 @@ class KdeConnectDevice:
         if self.notifications is None or not isinstance(notification_id, str):
             return
         if body.get("isCancel"):
+            self._notification_icon_urls.pop(notification_id, None)
             if (app := self._shared_notifications.pop(notification_id, None)) is not None:
                 self._fire_notification(
                     {"action": ACTION_REMOVED, "id": notification_id, "app": app}
@@ -302,7 +304,9 @@ class KdeConnectDevice:
         self._shared_notifications.pop(notification_id, None)
         self._shared_notifications[notification_id] = app
         while len(self._shared_notifications) > MAX_SHARED:
-            del self._shared_notifications[next(iter(self._shared_notifications))]
+            expired_id = next(iter(self._shared_notifications))
+            del self._shared_notifications[expired_id]
+            self._notification_icon_urls.pop(expired_id, None)
         data: dict[str, Any] = {
             "action": action,
             "id": notification_id,
@@ -311,7 +315,7 @@ class KdeConnectDevice:
             "text": _text(body.get("text")),
             "ticker": _text(body.get("ticker")),
             "silent": silent,
-            "icon_url": None,
+            "icon_url": self._notification_icon_urls.get(notification_id),
         }
         size, port = packet.payload_size, packet.payload_port
         if size is not None and port is not None and 0 < size <= MAX_ICON_SIZE:
@@ -338,6 +342,8 @@ class KdeConnectDevice:
             except NoURLAvailableError:
                 base = ""
             data["icon_url"] = base + path
+            if data["id"] in self._shared_notifications:
+                self._notification_icon_urls[data["id"]] = data["icon_url"]
         self._fire_notification(data)
 
     @callback
