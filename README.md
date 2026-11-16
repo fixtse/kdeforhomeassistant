@@ -2,6 +2,8 @@
 
 # KDE for Home Assistant
 
+> **Fork of [Radeaus/kdeforhomeassistant](https://github.com/Radeaus/kdeforhomeassistant)** that adds [notifications from devices](#notifications-from-devices): phones and computers share their notifications with Home Assistant directly, and you choose per device and per app what comes in. Install this repository to get it; everything else works as upstream.
+
 A Home Assistant integration that speaks the [KDE Connect](https://kdeconnect.kde.org/) protocol. Home Assistant joins your network as a regular KDE Connect device, so your PCs and phones only need the normal KDE Connect app.
 
 <p align="center">
@@ -16,11 +18,11 @@ A Home Assistant integration that speaks the [KDE Connect](https://kdeconnect.kd
 
 You need KDE Connect 23.08 or newer on each computer or phone, on the same network as Home Assistant (UDP 1716 and TCP 1716–1764 open between them).
 
-1. **Install the integration.** Search for **KDE for Home Assistant** in the Marketplace and download it.
+1. **Install the integration.** In the Marketplace (HACS), add `https://github.com/fixtse/kdeforhomeassistant` as a custom repository (type *Integration*) and download **KDE for Home Assistant**.
 <!-- ha-marketplace:exclude-start -->
    Or open it in your Home Assistant directly:
 
-   [![Open in the Marketplace of your Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Radeaus&repository=kdeforhomeassistant&category=integration)
+   [![Open in the Marketplace of your Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=fixtse&repository=kdeforhomeassistant&category=integration)
 
    Without the Marketplace: copy `custom_components/kdeforhomeassistant` into your `custom_components` folder.
 <!-- ha-marketplace:exclude-end -->
@@ -208,6 +210,8 @@ actions:
       title: "{{ trigger.event.data.title }}"
       message: "{{ trigger.event.data.text }}"
 ```
+
+[![Import the blueprint into Home Assistant](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ffixtse%2Fkdeforhomeassistant%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fnotifications_on_esphome_display.yaml)
 
 The blueprint [notifications_on_esphome_display.yaml](blueprints/automation/notifications_on_esphome_display.yaml) shows them on an ESPHome display with a `show_message` action, like the OpenNextion knob, and clears them when they are removed on the device.
 
