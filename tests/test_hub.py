@@ -288,6 +288,20 @@ async def test_udp_port_in_use() -> None:
         taken.close()
 
 
+async def test_udp_port_shared() -> None:
+    """KDE Connect on the same computer opens the port shared; we share it too."""
+    shared = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    shared.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    shared.bind(("0.0.0.0", 0))
+    hub = _new_hub(udp_port=shared.getsockname()[1])
+    try:
+        await hub.start()
+        assert hub._udp is not None
+    finally:
+        await hub.stop()
+        shared.close()
+
+
 async def test_announce(hub: KdeConnectHub) -> None:
     """Announcing does nothing before start, and survives send errors."""
     _new_hub().announce(["127.0.0.1"])

@@ -309,6 +309,9 @@ class KdeConnectHub:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            # Share the discovery port with KDE Connect running on the same
+            # computer (it opens it shared too); broadcasts reach us both.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("0.0.0.0", self._udp_port))
         except OSError:
             sock.close()
