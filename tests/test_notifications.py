@@ -197,6 +197,11 @@ async def test_notification_icon(hass: HomeAssistant, hass_client_no_auth) -> No
     await _settle(hass)
     assert events[-1].data["icon_url"] == url
     assert events[-1].data["action"] == "updated"
+    # A different app may reuse a desktop notification id, without an image.
+    device.notify(id="1", appName="Telegram", title="Different app")
+    await _settle(hass)
+    assert events[-1].data["icon_url"] is None
+    assert events[-1].data["action"] == "added"
     device.notify(id="1", isCancel=True)
     await _settle(hass)
     device.notify(id="1", appName="Mail", title="Reused id")

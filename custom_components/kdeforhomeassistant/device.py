@@ -296,9 +296,11 @@ class KdeConnectDevice:
         silent = body.get("silent") is True
         if not self.notifications.get(self.device_id).shares(app, silent):
             return
+        if self._shared_notifications.get(notification_id) != app:
+            self._notification_icon_urls.pop(notification_id, None)
         action = (
             ACTION_UPDATED
-            if notification_id in self._shared_notifications
+            if self._shared_notifications.get(notification_id) == app
             else ACTION_ADDED
         )
         self._shared_notifications.pop(notification_id, None)
@@ -335,6 +337,8 @@ class KdeConnectDevice:
         except OSError as err:
             _LOGGER.debug("No icon for a notification of %s: %s", self.name, err)
         else:
+            if self._shared_notifications.get(data["id"]) != data["app"]:
+                return
             token = async_get_icons(self.hass).add(icon)
             path = f"{ICON_URL}/{token}.png"
             try:
