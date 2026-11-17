@@ -58,9 +58,11 @@ from .notifications import (
     ICON_URL,
     MAX_ICON_SIZE,
     MAX_SHARED,
+    DesktopNotificationChats,
     NotificationStore,
     async_get_icons,
     clean_app_name,
+    is_chat_notification,
     notification_content,
 )
 
@@ -161,7 +163,9 @@ class KdeConnectDevice:
         self._notification_listeners: list[Callable[[dict[str, Any]], None]] = []
         # Notifications we passed on, by id, to report when they go away.
         self._shared_notifications: dict[str, str] = {}
+        self._desktop_chats = DesktopNotificationChats()
         self._notification_icon_urls: dict[str, str] = {}
+        self._notification_tokens: dict[str, object] = {}
         # Log a lost connection once, and once when it comes back.
         self._logged_unavailable = False
 
@@ -301,7 +305,12 @@ class KdeConnectDevice:
         notification_id = body.get("id")
         if self.notifications is None or not isinstance(notification_id, str):
             return
+        source_id = notification_id
         if body.get("isCancel"):
+            notification_id, keep_chat = self._desktop_chats.remove(source_id)
+            if keep_chat:
+                return
+            self._notification_tokens.pop(notification_id, None)
             self._notification_icon_urls.pop(notification_id, None)
             if (
                 app := self._shared_notifications.pop(notification_id, None)
@@ -317,6 +326,18 @@ class KdeConnectDevice:
         silent = body.get("silent") is True
         if not self.notifications.get(self.device_id).shares(app, silent):
             return
+        title, text = notification_content(body)
+        if self.device_type in ("desktop", "laptop") and is_chat_notification(
+            app, body
+        ):
+            notification_id, text = self._desktop_chats.add(
+                source_id,
+                app,
+                title,
+                text,
+                complete=isinstance(body.get("conversation"), list)
+                and bool(body["conversation"]),
+            )
         if self._shared_notifications.get(notification_id) != app:
             self._notification_icon_urls.pop(notification_id, None)
         action = (
@@ -326,11 +347,12 @@ class KdeConnectDevice:
         )
         self._shared_notifications.pop(notification_id, None)
         self._shared_notifications[notification_id] = app
+        revision = self._notification_tokens[notification_id] = object()
         while len(self._shared_notifications) > MAX_SHARED:
             expired_id = next(iter(self._shared_notifications))
             del self._shared_notifications[expired_id]
             self._notification_icon_urls.pop(expired_id, None)
-        title, text = notification_content(body)
+            self._notification_tokens.pop(expired_id, None)
         data: dict[str, Any] = {
             "action": action,
             "id": notification_id,
@@ -341,25 +363,27 @@ class KdeConnectDevice:
             "silent": silent,
             "icon_url": self._notification_icon_urls.get(notification_id),
         }
+        if notification_id != source_id:
+            data["source_id"] = source_id
         size, port = packet.payload_size, packet.payload_port
         if size is not None and port is not None and 0 < size <= MAX_ICON_SIZE:
             self.entry.async_create_background_task(
                 self.hass,
-                self._async_notification_with_icon(data, port, size),
+                self._async_notification_with_icon(data, port, size, revision),
                 f"{self.name} notification icon",
             )
         else:
             self._fire_notification(data)
 
     async def _async_notification_with_icon(
-        self, data: dict[str, Any], port: int, size: int
+        self, data: dict[str, Any], port: int, size: int, revision: object
     ) -> None:
         try:
             icon = await self.hub.async_download_payload(self.device_id, port, size)
-        except OSError as err:
+        except (OSError, TimeoutError) as err:
             _LOGGER.debug("No icon for a notification of %s: %s", self.name, err)
         else:
-            if self._shared_notifications.get(data["id"]) != data["app"]:
+            if self._notification_tokens.get(data["id"]) is not revision:
                 return
             token = async_get_icons(self.hass).add(icon)
             path = f"{ICON_URL}/{token}.png"
@@ -370,7 +394,8 @@ class KdeConnectDevice:
             data["icon_url"] = base + path
             if data["id"] in self._shared_notifications:
                 self._notification_icon_urls[data["id"]] = data["icon_url"]
-        self._fire_notification(data)
+        if self._notification_tokens.get(data["id"]) is revision:
+            self._fire_notification(data)
 
     @callback
     def _fire_notification(self, data: dict[str, Any]) -> None:
