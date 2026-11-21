@@ -7,6 +7,7 @@ import binascii
 import hashlib
 import json
 import logging
+import secrets
 import socket
 import uuid
 from collections.abc import Callable
@@ -164,6 +165,7 @@ class KdeConnectDevice:
         # Notifications we passed on, by id, to report when they go away.
         self._shared_notifications: dict[str, str] = {}
         self._desktop_chats = DesktopNotificationChats()
+        self._chat_icon_key = secrets.token_bytes(32)
         self._notification_icon_urls: dict[str, str] = {}
         self._notification_tokens: dict[str, object] = {}
         # Log a lost connection once, and once when it comes back.
@@ -363,20 +365,41 @@ class KdeConnectDevice:
             "silent": silent,
             "icon_url": self._notification_icon_urls.get(notification_id),
         }
+        # The panel matches cards by title and image URL. Give a grouped chat
+        # a stable URL even before its first icon arrives.
+        icon_token = None
         if notification_id != source_id:
             data["source_id"] = source_id
+            conversation = json.dumps([app, title.strip()]).encode()
+            digest = hashlib.blake2s(
+                conversation, key=self._chat_icon_key, digest_size=24
+            ).hexdigest()
+            icon_token = f"chat-{digest}"
+            data["icon_url"] = self._notification_icon_url(icon_token)
         size, port = packet.payload_size, packet.payload_port
         if size is not None and port is not None and 0 < size <= MAX_ICON_SIZE:
             self.entry.async_create_background_task(
                 self.hass,
-                self._async_notification_with_icon(data, port, size, revision),
+                self._async_notification_with_icon(data, port, size, revision, icon_token),
                 f"{self.name} notification icon",
             )
         else:
             self._fire_notification(data)
 
+    def _notification_icon_url(self, token: str) -> str:
+        try:
+            base = get_url(self.hass, prefer_external=False)
+        except NoURLAvailableError:
+            base = ""
+        return f"{base}{ICON_URL}/{token}.png"
+
     async def _async_notification_with_icon(
-        self, data: dict[str, Any], port: int, size: int, revision: object
+        self,
+        data: dict[str, Any],
+        port: int,
+        size: int,
+        revision: object,
+        icon_token: str | None,
     ) -> None:
         try:
             icon = await self.hub.async_download_payload(self.device_id, port, size)
@@ -385,13 +408,8 @@ class KdeConnectDevice:
         else:
             if self._notification_tokens.get(data["id"]) is not revision:
                 return
-            token = async_get_icons(self.hass).add(icon)
-            path = f"{ICON_URL}/{token}.png"
-            try:
-                base = get_url(self.hass, prefer_external=False)
-            except NoURLAvailableError:
-                base = ""
-            data["icon_url"] = base + path
+            token = async_get_icons(self.hass).add(icon, token=icon_token)
+            data["icon_url"] = self._notification_icon_url(token)
             if data["id"] in self._shared_notifications:
                 self._notification_icon_urls[data["id"]] = data["icon_url"]
         if self._notification_tokens.get(data["id"]) is revision:

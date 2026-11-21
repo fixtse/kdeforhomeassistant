@@ -97,7 +97,7 @@ async def test_choose_apps_per_device(hass: HomeAssistant, hass_ws_client) -> No
     assert event["action"] == "added"
     assert event["title"] == "Ann"
     assert event["text"] == "Again"
-    assert event["icon_url"] is None
+    assert "/notification_icon/chat-" in event["icon_url"]
     registry_device = dr.async_get(hass).async_get_device(
         identifiers={
             (DOMAIN, entry.subentries[_subentry_id(entry, "Desk")].data["device_id"])
@@ -205,7 +205,7 @@ async def test_notification_icon(hass: HomeAssistant, hass_client_no_auth) -> No
     assert events[-1].data["icon_url"] == url
     assert events[-1].data["action"] == "updated"
     # A different app may reuse a desktop notification id, without an image.
-    device.notify(id="1", appName="Telegram", title="Different app")
+    device.notify(id="1", appName="Calendar", title="Different app")
     await _settle(hass)
     assert events[-1].data["icon_url"] is None
     assert events[-1].data["action"] == "added"

@@ -95,7 +95,9 @@ async def _settle(hass):
     await hass.async_block_till_done()
 
 
-async def test_desktop_chat_packets_update_one_notification(hass: HomeAssistant):
+async def test_desktop_chat_packets_update_one_notification(
+    hass: HomeAssistant, hass_client_no_auth
+):
     entry = await _setup(hass)
     peer = FakeDevice("Desk", protocol_version=8)
     await _pair(hass, entry, peer)
@@ -107,12 +109,22 @@ async def test_desktop_chat_packets_update_one_notification(hass: HomeAssistant)
     hass.bus.async_listen(EVENT_NOTIFICATION, events.append)
     peer.notify(id="first", appName="Telegram Desktop", title="Alice", text="First")
     await _settle(hass)
-    peer.notify(id="second", appName="Telegram Desktop", title="Alice", text="Second")
+    icon = b"\x89PNG\r\n\x1a\n" + b"avatar" * 100
+    await peer.notify_with_icon(
+        icon, id="second", appName="Telegram Desktop", title="Alice", text="Second"
+    )
     await _settle(hass)
     assert [event.data["action"] for event in events] == ["added", "updated"]
     assert events[0].data["id"] == events[1].data["id"]
     assert events[1].data["source_id"] == "second"
     assert events[1].data["text"] == "First\nSecond"
+    url = events[0].data["icon_url"]
+    assert events[1].data["icon_url"] == url
+    client = await hass_client_no_auth()
+    response = await client.get(url[url.index("/api/") :])
+    assert response.status == 200
+    assert await response.read() == icon
+    assert response.headers["Cache-Control"] == "no-store"
     peer.notify(id="first", isCancel=True)
     await _settle(hass)
     assert len(events) == 2

@@ -43,7 +43,7 @@ from .device import KdeConnectDevice
 from .kdeconnect import Identity, KdeConnectHub
 from .kdeconnect.protocol import UDP_PORT
 from .legacy import async_check_legacy_issue
-from .notifications import NotificationStore
+from .notifications import NotificationStore, async_get_icons
 from .panel import async_register_panel, async_remove_panel
 from .websocket import async_register_websocket_commands
 
@@ -102,6 +102,7 @@ def identity_from_entry(entry: ConfigEntry) -> Identity:
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the API the panel talks to."""
     async_register_websocket_commands(hass)
+    async_get_icons(hass)
     return True
 
 

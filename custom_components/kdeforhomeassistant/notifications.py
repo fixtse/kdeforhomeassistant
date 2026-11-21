@@ -175,10 +175,11 @@ class NotificationIcons:
     def __init__(self) -> None:
         self._icons: OrderedDict[str, bytes] = OrderedDict()
 
-    def add(self, data: bytes) -> str:
+    def add(self, data: bytes, *, token: str | None = None) -> str:
         """Keep an icon and return its token."""
-        token = secrets.token_urlsafe(24)
+        token = token or secrets.token_urlsafe(24)
         self._icons[token] = data
+        self._icons.move_to_end(token)
         while len(self._icons) > MAX_ICONS:
             self._icons.popitem(last=False)
         return token
@@ -201,11 +202,14 @@ class NotificationIconView(HomeAssistantView):
     async def get(self, request: web.Request, token: str) -> web.Response:
         """Return the icon, or 404."""
         if (data := self._icons.get(token)) is None:
-            return web.Response(status=404)
+            return web.Response(status=404, headers={"Cache-Control": "no-store"})
+        cache_control = (
+            "no-store" if token.startswith("chat-") else "private, max-age=3600"
+        )
         return web.Response(
             body=data,
             content_type="image/png",
-            headers={"Cache-Control": "private, max-age=3600"},
+            headers={"Cache-Control": cache_control},
         )
 
 
